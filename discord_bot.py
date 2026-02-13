@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 import random
+import os
 
 # Bot setup
 intents = discord.Intents.default()
@@ -63,4 +64,4 @@ async def on_ready():
     print(f'📝 Commands synced and ready!')
 
 # Run the bot
-client.run('MTQ3MTg4MTc5NjMwNzEyODM5NA.GoiTTF.n6H5UFHlFHFIw5M0ro3dJHx8ocf8guNOMCfYdA')
+client.run(os.getenv('DISCORD_TOKEN'))
