@@ -64,9 +64,3 @@ async def on_ready():
 
 # Run the bot
 client.run('MTQ3MTg4MTc5NjMwNzEyODM5NA.GoiTTF.n6H5UFHlFHFIw5M0ro3dJHx8ocf8guNOMCfYdA')
-
-@client.event
-async def on_ready():
-    await tree.clear_commands(guild=None)  # Clears global commands
-    await tree.sync()
-    print(f'✅ Logged in as {client.user}')
