@@ -34,15 +34,27 @@ QUOTES = [
 
 @tree.command(name="joke", description="Get a random programming joke")
 async def joke(interaction: discord.Interaction):
-    await interaction.response.send_message(random.choice(JOKES))
+    embed = discord.Embed(
+        description=random.choice(JOKES),
+        color=discord.Color.blue()
+    )
+    await interaction.response.send_message(embed=embed)
 
 @tree.command(name="fact", description="Get a random fun fact")
 async def fact(interaction: discord.Interaction):
-    await interaction.response.send_message(random.choice(FACTS))
+    embed = discord.Embed(
+        description=random.choice(FACTS),
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed)
 
 @tree.command(name="quote", description="Get a random inspirational quote")
 async def quote(interaction: discord.Interaction):
-    await interaction.response.send_message(random.choice(QUOTES))
+    embed = discord.Embed(
+        description=random.choice(QUOTES),
+        color=discord.Color.gold()
+    )
+    await interaction.response.send_message(embed=embed)
 
 @client.event
 async def on_ready():
