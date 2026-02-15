@@ -130,27 +130,22 @@ async def on_message(message):
     """Detect Disboard bump and Unfocused boop success messages"""
     global bump_timer, boop_timer
     
-    # Ignore our own messages
     if message.author == client.user:
         return
     
-    # Detect Disboard bump success (Disboard bot ID: 302050872383242240)
+    # Detect Disboard bump success (bot ID: 302050872383242240)
     if message.author.id == 302050872383242240:
-        # Check if it's a successful bump message
         if message.embeds and len(message.embeds) > 0:
             embed = message.embeds[0]
-            # Disboard sends "Bump done!" in description
             if embed.description and "Bump done!" in embed.description:
-                # Extract user from embed description (format: ":thumbsup: @Username, Bump done!")
                 user = message.interaction.user if message.interaction else None
                 
                 if user:
-                    # Update stats
                     bump_stats["count"] += 1
                     bump_stats["last_user"] = user.id
                     bump_stats["last_time"] = datetime.utcnow()
                     
-                    # Post thank you
+                    # Your bot posts a SEPARATE thank you message with YOUR image
                     if BUMP_CHANNEL_ID:
                         channel = client.get_channel(BUMP_CHANNEL_ID)
                         if channel:
@@ -163,10 +158,38 @@ async def on_message(message):
                                 embed.set_image(url=BUMP_THANKYOU_IMAGE)
                             await channel.send(embed=embed)
                     
-                    # Start timer
                     if bump_timer:
                         bump_timer.cancel()
                     bump_timer = asyncio.create_task(start_bump_timer())
+    
+    # Detect Unfocused boop success (bot ID: 835255643157168168)
+    elif message.author.id == 835255643157168168:
+        if message.embeds and len(message.embeds) > 0:
+            embed = message.embeds[0]
+            if embed.title and "Boop Success!" in embed.title:
+                user = message.interaction.user if message.interaction else None
+                
+                if user:
+                    boop_stats["count"] += 1
+                    boop_stats["last_user"] = user.id
+                    boop_stats["last_time"] = datetime.utcnow()
+                    
+                    # Your bot posts a SEPARATE thank you message with YOUR image
+                    if BUMP_CHANNEL_ID:
+                        channel = client.get_channel(BUMP_CHANNEL_ID)
+                        if channel:
+                            embed = discord.Embed(
+                                title="✅ Boop Successful!",
+                                description=f"Thanks {user.mention} for booping the server! 🎉\n\nNext boop available in 2 hours.",
+                                color=discord.Color.green()
+                            )
+                            if BOOP_THANKYOU_IMAGE:
+                                embed.set_image(url=BOOP_THANKYOU_IMAGE)
+                            await channel.send(embed=embed)
+                    
+                    if boop_timer:
+                        boop_timer.cancel()
+                    boop_timer = asyncio.create_task(start_boop_timer())
     
     # Detect Unfocused boop success (Unfocused bot ID: 1233144142039195648)
     elif message.author.id == 1233144142039195648:
