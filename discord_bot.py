@@ -4,10 +4,14 @@ import random
 import os
 import asyncio
 from datetime import datetime, timedelta, UTC
+from PIL import Image, ImageDraw, ImageFont
+import aiohttp
+from io import BytesIO
 
 # Bot setup
 intents = discord.Intents.default()
-intents.message_content = True  # Needed to detect bump/boop messages
+intents.message_content = True
+intents.members = True  # Needed for member autocomplete
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
@@ -17,15 +21,17 @@ boop_timer = None
 bump_stats = {"count": 0, "last_user": None, "last_time": None}
 boop_stats = {"count": 0, "last_user": None, "last_time": None}
 
-# Configuration (set these via environment variables or hardcode)
-BUMP_CHANNEL_ID = int(os.getenv('BUMP_CHANNEL_ID', '0'))  # Set in Railway
-BUMP_ROLE_ID = int(os.getenv('BUMP_ROLE_ID', '0'))  # Set in Railway
-BUMP_REMINDER_IMAGE = os.getenv('BUMP_REMINDER_IMAGE', '')  # URL to image
-BUMP_THANKYOU_IMAGE = os.getenv('BUMP_THANKYOU_IMAGE', '')  # URL to image
-BOOP_REMINDER_IMAGE = os.getenv('BOOP_REMINDER_IMAGE', '')  # URL to image
-BOOP_THANKYOU_IMAGE = os.getenv('BOOP_THANKYOU_IMAGE', '')  # URL to image
+# Configuration
+BUMP_CHANNEL_ID = int(os.getenv('BUMP_CHANNEL_ID', '0'))
+BUMP_ROLE_ID = int(os.getenv('BUMP_ROLE_ID', '0'))
+BUMP_REMINDER_IMAGE = os.getenv('BUMP_REMINDER_IMAGE', '')
+BUMP_THANKYOU_IMAGE = os.getenv('BUMP_THANKYOU_IMAGE', '')
+BOOP_REMINDER_IMAGE = os.getenv('BOOP_REMINDER_IMAGE', '')
+BOOP_THANKYOU_IMAGE = os.getenv('BOOP_THANKYOU_IMAGE', '')
+QUOTES_CHANNEL_ID = int(os.getenv('QUOTES_CHANNEL_ID', '0'))
+SPEECH_BUBBLE_IMAGE = os.getenv('SPEECH_BUBBLE_IMAGE', '')
 
-# Your lists of responses
+# Response lists
 JOKES = [
     "Why do programmers prefer dark mode? Because light attracts bugs! 🐛",
     "Why did the developer go broke? Because they used up all their cache! 💸",
@@ -42,13 +48,150 @@ FACTS = [
     "The shortest war in history lasted only 38-45 minutes (Anglo-Zanzibar War, 1896)! ⚔️",
 ]
 
-QUOTES = [
-    "The only way to do great work is to love what you do. - Steve Jobs",
-    "Code is like humor. When you have to explain it, it's bad. - Cory House",
-    "First, solve the problem. Then, write the code. - John Johnson",
-    "Simplicity is the soul of efficiency. - Austin Freeman",
-    "Make it work, make it right, make it fast. - Kent Beck",
-]
+# Quote Modal
+class QuoteModal(discord.ui.Modal, title="Submit a Quote"):
+    quote_text = discord.ui.TextInput(
+        label="What did they say?",
+        style=discord.TextStyle.paragraph,
+        placeholder="Enter the quote here...",
+        required=True,
+        max_length=500
+    )
+    
+    def __init__(self, user: discord.Member):
+        super().__init__()
+        self.quoted_user = user
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        # Generate quote image
+        try:
+            image_bytes = await generate_quote_image(self.quoted_user, str(self.quote_text))
+            
+            # Post to quotes channel
+            if QUOTES_CHANNEL_ID:
+                channel = client.get_channel(QUOTES_CHANNEL_ID)
+                if channel:
+                    file = discord.File(fp=BytesIO(image_bytes), filename="quote.png")
+                    await channel.send(
+                        content=f"📜 Quote submitted by {interaction.user.mention}",
+                        file=file
+                    )
+                    await interaction.followup.send("✅ Quote posted!", ephemeral=True)
+                else:
+                    await interaction.followup.send("❌ Quotes channel not found!", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ QUOTES_CHANNEL_ID not configured!", ephemeral=True)
+        except Exception as e:
+            print(f"Error generating quote: {e}")
+            await interaction.followup.send(f"❌ Error creating quote: {e}", ephemeral=True)
+
+async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
+    """Generate a quote image with user avatar and speech bubble"""
+    
+    # Download user avatar
+    async with aiohttp.ClientSession() as session:
+        async with session.get(str(user.display_avatar.url)) as resp:
+            avatar_bytes = await resp.read()
+        
+        # Download speech bubble
+        async with session.get(SPEECH_BUBBLE_IMAGE) as resp:
+            bubble_bytes = await resp.read()
+    
+    # Open images
+    avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA")
+    bubble = Image.open(BytesIO(bubble_bytes)).convert("RGBA")
+    
+    # Resize avatar to 150x150
+    avatar = avatar.resize((150, 150), Image.Resampling.LANCZOS)
+    
+    # Create circular mask for avatar
+    mask = Image.new('L', (150, 150), 0)
+    draw_mask = ImageDraw.Draw(mask)
+    draw_mask.ellipse((0, 0, 150, 150), fill=255)
+    avatar.putalpha(mask)
+    
+    # Load pixel font (using default if custom not available)
+    try:
+        # Try to use a pixel-style font
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 24)
+    except:
+        font = ImageFont.load_default()
+    
+    # Calculate text dimensions and wrap text
+    bubble_width = bubble.width
+    max_text_width = bubble_width - 100  # Padding
+    
+    # Wrap text
+    lines = []
+    words = quote_text.split()
+    current_line = ""
+    
+    draw_temp = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+    for word in words:
+        test_line = current_line + word + " "
+        bbox = draw_temp.textbbox((0, 0), test_line, font=font)
+        if bbox[2] - bbox[0] <= max_text_width:
+            current_line = test_line
+        else:
+            if current_line:
+                lines.append(current_line.strip())
+            current_line = word + " "
+    if current_line:
+        lines.append(current_line.strip())
+    
+    # Calculate required bubble height
+    line_height = 35
+    text_height = len(lines) * line_height
+    min_bubble_height = text_height + 100  # Add padding
+    
+    # Expand bubble vertically if needed
+    if min_bubble_height > bubble.height:
+        # Scale bubble to fit text
+        scale_factor = min_bubble_height / bubble.height
+        new_height = int(bubble.height * scale_factor)
+        bubble = bubble.resize((bubble_width, new_height), Image.Resampling.LANCZOS)
+    
+    # Create final canvas
+    canvas_width = 200 + bubble.width  # Avatar space + bubble
+    canvas_height = max(200, bubble.height)  # At least avatar height
+    canvas = Image.new('RGBA', (canvas_width, canvas_height), (0, 0, 0, 0))
+    
+    # Paste avatar on left
+    avatar_y = (canvas_height - 150) // 2
+    canvas.paste(avatar, (25, avatar_y), avatar)
+    
+    # Paste bubble
+    bubble_y = (canvas_height - bubble.height) // 2
+    canvas.paste(bubble, (175, bubble_y), bubble)
+    
+    # Draw text centered in bubble
+    draw = ImageDraw.Draw(canvas)
+    text_start_y = bubble_y + (bubble.height - text_height) // 2
+    
+    for i, line in enumerate(lines):
+        bbox = draw.textbbox((0, 0), line, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_x = 175 + (bubble.width - text_width) // 2
+        text_y = text_start_y + (i * line_height)
+        
+        # Draw text with white color
+        draw.text((text_x, text_y), line, font=font, fill=(255, 255, 255, 255))
+    
+    # Draw username below avatar
+    username_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+    name_bbox = draw.textbbox((0, 0), user.display_name, font=username_font)
+    name_width = name_bbox[2] - name_bbox[0]
+    name_x = 100 - (name_width // 2)
+    name_y = avatar_y + 160
+    draw.text((name_x, name_y), user.display_name, font=username_font, fill=(255, 255, 255, 255))
+    
+    # Save to bytes
+    output = BytesIO()
+    canvas.save(output, format='PNG')
+    output.seek(0)
+    return output.getvalue()
 
 @tree.command(name="joke", description="Get a random programming joke")
 async def joke(interaction: discord.Interaction):
@@ -66,13 +209,11 @@ async def fact(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed)
 
-@tree.command(name="quote", description="Get a random inspirational quote")
-async def quote(interaction: discord.Interaction):
-    embed = discord.Embed(
-        description=random.choice(QUOTES),
-        color=discord.Color.gold()
-    )
-    await interaction.response.send_message(embed=embed)
+@tree.command(name="quote", description="Quote a server member")
+async def quote(interaction: discord.Interaction, user: discord.Member):
+    """Create a quote for a server member"""
+    modal = QuoteModal(user)
+    await interaction.response.send_modal(modal)
 
 # Bump/Boop Timer Functions
 async def start_bump_timer():
@@ -81,9 +222,8 @@ async def start_bump_timer():
     if bump_timer:
         bump_timer.cancel()
     
-    await asyncio.sleep(2 * 60 * 60)  # 2 hours
+    await asyncio.sleep(2 * 60 * 60)
     
-    # Post reminder
     if BUMP_CHANNEL_ID:
         channel = client.get_channel(BUMP_CHANNEL_ID)
         if channel:
@@ -106,9 +246,8 @@ async def start_boop_timer():
     if boop_timer:
         boop_timer.cancel()
     
-    await asyncio.sleep(2 * 60 * 60)  # 2 hours
+    await asyncio.sleep(2 * 60 * 60)
     
-    # Post reminder
     if BUMP_CHANNEL_ID:
         channel = client.get_channel(BUMP_CHANNEL_ID)
         if channel:
@@ -130,11 +269,10 @@ async def on_message(message):
     """Detect Disboard bump and Unfocused boop success messages"""
     global bump_timer, boop_timer
     
-    # Ignore messages from our own bot
     if message.author == client.user:
         return
     
-    # Detect Disboard bump success (bot ID: 302050872383242240)
+    # Detect Disboard bump success
     if message.author.id == 302050872383242240:
         print(f"Detected Disboard message")
         if message.embeds and len(message.embeds) > 0:
@@ -147,12 +285,10 @@ async def on_message(message):
                 print(f"User: {user}")
                 
                 if user:
-                    # Update stats
                     bump_stats["count"] += 1
                     bump_stats["last_user"] = user.id
                     bump_stats["last_time"] = datetime.now(UTC)
                     
-                    # Post thank you
                     if BUMP_CHANNEL_ID:
                         channel = client.get_channel(BUMP_CHANNEL_ID)
                         if channel:
@@ -167,12 +303,11 @@ async def on_message(message):
                             
                             await channel.send(embed=thank_embed)
                     
-                    # Start timer
                     if bump_timer:
                         bump_timer.cancel()
                     bump_timer = asyncio.create_task(start_bump_timer())
     
-    # Detect Unfocused boop success (bot ID: 835255643157168168)
+    # Detect Unfocused boop success
     elif message.author.id == 835255643157168168:
         print(f"Detected Unfocused message")
         if message.embeds and len(message.embeds) > 0:
@@ -180,19 +315,16 @@ async def on_message(message):
             print(f"Embed title: {embed.title}")
             print(f"Embed description: {embed.description}")
             
-            # Check for "Boop Success" in title (case-insensitive)
             if embed.title and "boop success" in embed.title.lower():
                 print(f"Boop success detected!")
                 user = message.interaction_metadata.user if message.interaction_metadata else None
                 print(f"User: {user}")
                 
                 if user:
-                    # Update stats
                     boop_stats["count"] += 1
                     boop_stats["last_user"] = user.id
                     boop_stats["last_time"] = datetime.now(UTC)
                     
-                    # Post thank you
                     if BUMP_CHANNEL_ID:
                         channel = client.get_channel(BUMP_CHANNEL_ID)
                         if channel:
@@ -207,7 +339,6 @@ async def on_message(message):
                             
                             await channel.send(embed=thank_embed)
                     
-                    # Start timer
                     if boop_timer:
                         boop_timer.cancel()
                     boop_timer = asyncio.create_task(start_boop_timer())
@@ -278,7 +409,17 @@ async def on_ready():
     if BUMP_CHANNEL_ID:
         print(f'📢 Posting reminders to channel ID: {BUMP_CHANNEL_ID}')
     else:
-        print(f'⚠️  BUMP_CHANNEL_ID not set! Set it in Railway environment variables.')
+        print(f'⚠️  BUMP_CHANNEL_ID not set!')
+    if QUOTES_CHANNEL_ID:
+        print(f'📜 Posting quotes to channel ID: {QUOTES_CHANNEL_ID}')
+    else:
+        print(f'⚠️  QUOTES_CHANNEL_ID not set!')
 
-# Run the bot
 client.run(os.getenv('DISCORD_TOKEN'))
+```
+
+**Also update `requirements.txt`:**
+```
+discord.py
+pillow
+aiohttp
