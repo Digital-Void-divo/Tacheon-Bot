@@ -416,10 +416,4 @@ async def on_ready():
         print(f'⚠️  QUOTES_CHANNEL_ID not set!')
 
 client.run(os.getenv('DISCORD_TOKEN'))
-```
-
-**Also update `requirements.txt`:**
-```
-discord.py
-pillow
 aiohttp
