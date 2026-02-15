@@ -136,10 +136,15 @@ async def on_message(message):
     
     # Detect Disboard bump success (bot ID: 302050872383242240)
     if message.author.id == 302050872383242240:
+        print(f"Detected Disboard message")
         if message.embeds and len(message.embeds) > 0:
             embed = message.embeds[0]
-            if embed.description and "Bump done!" in embed.description:
+            print(f"Embed description: {embed.description}")
+            
+            if embed.description and "bump done" in embed.description.lower():
+                print(f"Bump success detected!")
                 user = message.interaction_metadata.user if message.interaction_metadata else None
+                print(f"User: {user}")
                 
                 if user:
                     # Update stats
@@ -169,10 +174,17 @@ async def on_message(message):
     
     # Detect Unfocused boop success (bot ID: 835255643157168168)
     elif message.author.id == 835255643157168168:
+        print(f"Detected Unfocused message")
         if message.embeds and len(message.embeds) > 0:
             embed = message.embeds[0]
-            if embed.title and "Boop Success!" in embed.title:
+            print(f"Embed title: {embed.title}")
+            print(f"Embed description: {embed.description}")
+            
+            # Check for "Boop Success" in title (case-insensitive)
+            if embed.title and "boop success" in embed.title.lower():
+                print(f"Boop success detected!")
                 user = message.interaction_metadata.user if message.interaction_metadata else None
+                print(f"User: {user}")
                 
                 if user:
                     # Update stats
