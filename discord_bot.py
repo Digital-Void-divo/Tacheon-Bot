@@ -132,41 +132,61 @@ async def on_message(message):
     if message.author == client.user:
         return
     
-    # Detect Disboard bump success
-    if message.author.id == 302050872383242240:  # Disboard bot ID
-        if "Bump done" in message.content or (message.embeds and "Bump done" in str(message.embeds[0].description)):
-            # Find who bumped (check recent messages)
-            async for msg in message.channel.history(limit=5, before=message):
-                if msg.interaction and msg.interaction.name == "bump":
-                    user = msg.interaction.user
-                    
-                    # Update stats
-                    bump_stats["count"] += 1
-                    bump_stats["last_user"] = user.id
-                    bump_stats["last_time"] = datetime.utcnow()
-                    
-                    # Post thank you
-                    embed = discord.Embed(
-                        title="✅ Bump Successful!",
-                        description=f"Thanks {user.mention} for bumping the server! 🎉\n\nNext bump available in 2 hours.",
-                        color=discord.Color.green()
-                    )
-                    
-                    if BUMP_THANKYOU_IMAGE:
-                        embed.set_image(url=BUMP_THANKYOU_IMAGE)
-                    
-                    await message.channel.send(embed=embed)
-                    
-                    # Start timer
-                    global bump_timer
-                    bump_timer = asyncio.create_task(start_bump_timer())
-                    break
+    # Detect when someone uses /bump command (via interaction)
+    if message.interaction and message.interaction.name == "bump":
+        user = message.interaction.user
+        
+        # Update stats
+        bump_stats["count"] += 1
+        bump_stats["last_user"] = user.id
+        bump_stats["last_time"] = datetime.utcnow()
+        
+        # Post thank you
+        if BUMP_CHANNEL_ID:
+            channel = client.get_channel(BUMP_CHANNEL_ID)
+            if channel:
+                embed = discord.Embed(
+                    title="✅ Bump Successful!",
+                    description=f"Thanks {user.mention} for bumping the server! 🎉\n\nNext bump available in 2 hours.",
+                    color=discord.Color.green()
+                )
+                
+                if BUMP_THANKYOU_IMAGE:
+                    embed.set_image(url=BUMP_THANKYOU_IMAGE)
+                
+                await channel.send(embed=embed)
+        
+        # Start timer
+        global bump_timer
+        bump_timer = asyncio.create_task(start_bump_timer())
     
-    # Detect Unfocused boop success (you'll need to provide the bot ID and success message)
-    # Unfocused bot ID: Replace with actual ID
-    # if message.author.id == UNFOCUSED_BOT_ID:
-    #     if "boop" in message.content.lower():
-    #         # Similar logic as bump
+    # Detect when someone uses /boop command (via interaction)
+    if message.interaction and message.interaction.name == "boop":
+        user = message.interaction.user
+        
+        # Update stats
+        boop_stats["count"] += 1
+        boop_stats["last_user"] = user.id
+        boop_stats["last_time"] = datetime.utcnow()
+        
+        # Post thank you
+        if BUMP_CHANNEL_ID:
+            channel = client.get_channel(BUMP_CHANNEL_ID)
+            if channel:
+                embed = discord.Embed(
+                    title="✅ Boop Successful!",
+                    description=f"Thanks {user.mention} for booping the server! 🎉\n\nNext boop available in 2 hours.",
+                    color=discord.Color.green()
+                )
+                
+                if BOOP_THANKYOU_IMAGE:
+                    embed.set_image(url=BOOP_THANKYOU_IMAGE)
+                
+                await channel.send(embed=embed)
+        
+        # Start timer
+        global boop_timer
+        boop_timer = asyncio.create_task(start_boop_timer())
 
 @tree.command(name="bump_status", description="Check bump and boop timer status")
 async def bump_status(interaction: discord.Interaction):
