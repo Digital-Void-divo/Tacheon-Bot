@@ -2,11 +2,28 @@ import discord
 from discord import app_commands
 import random
 import os
+import asyncio
+from datetime import datetime, timedelta
 
 # Bot setup
 intents = discord.Intents.default()
+intents.message_content = True  # Needed to detect bump/boop messages
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
+
+# Bump/Boop tracking
+bump_timer = None
+boop_timer = None
+bump_stats = {"count": 0, "last_user": None, "last_time": None}
+boop_stats = {"count": 0, "last_user": None, "last_time": None}
+
+# Configuration (set these via environment variables or hardcode)
+BUMP_CHANNEL_ID = int(os.getenv('BUMP_CHANNEL_ID', '0'))  # Set in Railway
+BUMP_ROLE_ID = int(os.getenv('BUMP_ROLE_ID', '0'))  # Set in Railway
+BUMP_REMINDER_IMAGE = os.getenv('BUMP_REMINDER_IMAGE', '')  # URL to image
+BUMP_THANKYOU_IMAGE = os.getenv('BUMP_THANKYOU_IMAGE', '')  # URL to image
+BOOP_REMINDER_IMAGE = os.getenv('BOOP_REMINDER_IMAGE', '')  # URL to image
+BOOP_THANKYOU_IMAGE = os.getenv('BOOP_THANKYOU_IMAGE', '')  # URL to image
 
 # Your lists of responses
 JOKES = [
@@ -57,11 +74,167 @@ async def quote(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed)
 
+# Bump/Boop Timer Functions
+async def start_bump_timer():
+    """Start 2-hour timer for bump reminder"""
+    global bump_timer
+    if bump_timer:
+        bump_timer.cancel()
+    
+    await asyncio.sleep(2 * 60 * 60)  # 2 hours
+    
+    # Post reminder
+    if BUMP_CHANNEL_ID:
+        channel = client.get_channel(BUMP_CHANNEL_ID)
+        if channel:
+            role_mention = f"<@&{BUMP_ROLE_ID}>" if BUMP_ROLE_ID else ""
+            
+            embed = discord.Embed(
+                title="📢 Ready to Bump!",
+                description=f"{role_mention}\n\nTime to bump the server on Disboard!\nUse `/bump` in this channel.",
+                color=discord.Color.blue()
+            )
+            
+            if BUMP_REMINDER_IMAGE:
+                embed.set_image(url=BUMP_REMINDER_IMAGE)
+            
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions(roles=True))
+
+async def start_boop_timer():
+    """Start 2-hour timer for boop reminder"""
+    global boop_timer
+    if boop_timer:
+        boop_timer.cancel()
+    
+    await asyncio.sleep(2 * 60 * 60)  # 2 hours
+    
+    # Post reminder
+    if BUMP_CHANNEL_ID:
+        channel = client.get_channel(BUMP_CHANNEL_ID)
+        if channel:
+            role_mention = f"<@&{BUMP_ROLE_ID}>" if BUMP_ROLE_ID else ""
+            
+            embed = discord.Embed(
+                title="📢 Ready to Boop!",
+                description=f"{role_mention}\n\nTime to boop the server on Unfocused!\nUse `/boop` in this channel.",
+                color=discord.Color.purple()
+            )
+            
+            if BOOP_REMINDER_IMAGE:
+                embed.set_image(url=BOOP_REMINDER_IMAGE)
+            
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions(roles=True))
+
+@client.event
+async def on_message(message):
+    """Detect Disboard bump and Unfocused boop success messages"""
+    # Ignore messages from our own bot
+    if message.author == client.user:
+        return
+    
+    # Detect Disboard bump success
+    if message.author.id == 302050872383242240:  # Disboard bot ID
+        if "Bump done" in message.content or (message.embeds and "Bump done" in str(message.embeds[0].description)):
+            # Find who bumped (check recent messages)
+            async for msg in message.channel.history(limit=5, before=message):
+                if msg.interaction and msg.interaction.name == "bump":
+                    user = msg.interaction.user
+                    
+                    # Update stats
+                    bump_stats["count"] += 1
+                    bump_stats["last_user"] = user.id
+                    bump_stats["last_time"] = datetime.utcnow()
+                    
+                    # Post thank you
+                    embed = discord.Embed(
+                        title="✅ Bump Successful!",
+                        description=f"Thanks {user.mention} for bumping the server! 🎉\n\nNext bump available in 2 hours.",
+                        color=discord.Color.green()
+                    )
+                    
+                    if BUMP_THANKYOU_IMAGE:
+                        embed.set_image(url=BUMP_THANKYOU_IMAGE)
+                    
+                    await message.channel.send(embed=embed)
+                    
+                    # Start timer
+                    global bump_timer
+                    bump_timer = asyncio.create_task(start_bump_timer())
+                    break
+    
+    # Detect Unfocused boop success (you'll need to provide the bot ID and success message)
+    # Unfocused bot ID: Replace with actual ID
+    # if message.author.id == UNFOCUSED_BOT_ID:
+    #     if "boop" in message.content.lower():
+    #         # Similar logic as bump
+
+@tree.command(name="bump_status", description="Check bump and boop timer status")
+async def bump_status(interaction: discord.Interaction):
+    """Show current status of bump/boop timers"""
+    
+    bump_info = "⏰ Ready to bump!"
+    if bump_stats["last_time"]:
+        time_since = datetime.utcnow() - bump_stats["last_time"]
+        time_until = timedelta(hours=2) - time_since
+        if time_until.total_seconds() > 0:
+            minutes = int(time_until.total_seconds() / 60)
+            bump_info = f"⏳ Next bump in {minutes} minutes"
+        last_user = f"<@{bump_stats['last_user']}>" if bump_stats["last_user"] else "Unknown"
+        bump_info += f"\nLast bumped by: {last_user}"
+    
+    boop_info = "⏰ Ready to boop!"
+    if boop_stats["last_time"]:
+        time_since = datetime.utcnow() - boop_stats["last_time"]
+        time_until = timedelta(hours=2) - time_since
+        if time_until.total_seconds() > 0:
+            minutes = int(time_until.total_seconds() / 60)
+            boop_info = f"⏳ Next boop in {minutes} minutes"
+        last_user = f"<@{boop_stats['last_user']}>" if boop_stats["last_user"] else "Unknown"
+        boop_info += f"\nLast booped by: {last_user}"
+    
+    embed = discord.Embed(
+        title="📊 Bump/Boop Status",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="Disboard Bump", value=bump_info, inline=False)
+    embed.add_field(name="Unfocused Boop", value=boop_info, inline=False)
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@tree.command(name="bump_stats", description="View bump and boop statistics")
+async def bump_stats_command(interaction: discord.Interaction):
+    """Show bump/boop statistics"""
+    
+    last_bumper = f"<@{bump_stats['last_user']}>" if bump_stats["last_user"] else "Nobody yet"
+    last_booper = f"<@{boop_stats['last_user']}>" if boop_stats["last_user"] else "Nobody yet"
+    
+    embed = discord.Embed(
+        title="📊 Bump/Boop Statistics",
+        color=discord.Color.gold()
+    )
+    embed.add_field(
+        name="📢 Disboard Bumps",
+        value=f"**Total:** {bump_stats['count']}\n**Last Bumper:** {last_bumper}",
+        inline=True
+    )
+    embed.add_field(
+        name="📢 Unfocused Boops",
+        value=f"**Total:** {boop_stats['count']}\n**Last Booper:** {last_booper}",
+        inline=True
+    )
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 @client.event
 async def on_ready():
     await tree.sync()
     print(f'✅ Logged in as {client.user}')
     print(f'📝 Commands synced and ready!')
+    print(f'⏰ Bump/Boop tracking active')
+    if BUMP_CHANNEL_ID:
+        print(f'📢 Posting reminders to channel ID: {BUMP_CHANNEL_ID}')
+    else:
+        print(f'⚠️  BUMP_CHANNEL_ID not set! Set it in Railway environment variables.')
 
 # Run the bot
 client.run(os.getenv('DISCORD_TOKEN'))
