@@ -3,7 +3,7 @@ from discord import app_commands
 import random
 import os
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 # Bot setup
 intents = discord.Intents.default()
@@ -130,6 +130,7 @@ async def on_message(message):
     """Detect Disboard bump and Unfocused boop success messages"""
     global bump_timer, boop_timer
     
+    # Ignore messages from our own bot
     if message.author == client.user:
         return
     
@@ -138,26 +139,30 @@ async def on_message(message):
         if message.embeds and len(message.embeds) > 0:
             embed = message.embeds[0]
             if embed.description and "Bump done!" in embed.description:
-                user = message.interaction.user if message.interaction else None
+                user = message.interaction_metadata.user if message.interaction_metadata else None
                 
                 if user:
+                    # Update stats
                     bump_stats["count"] += 1
                     bump_stats["last_user"] = user.id
-                    bump_stats["last_time"] = datetime.utcnow()
+                    bump_stats["last_time"] = datetime.now(UTC)
                     
-                    # Your bot posts a SEPARATE thank you message with YOUR image
+                    # Post thank you
                     if BUMP_CHANNEL_ID:
                         channel = client.get_channel(BUMP_CHANNEL_ID)
                         if channel:
-                            embed = discord.Embed(
+                            thank_embed = discord.Embed(
                                 title="✅ Bump Successful!",
                                 description=f"Thanks {user.mention} for bumping the server! 🎉\n\nNext bump available in 2 hours.",
                                 color=discord.Color.green()
                             )
+                            
                             if BUMP_THANKYOU_IMAGE:
-                                embed.set_image(url=BUMP_THANKYOU_IMAGE)
-                            await channel.send(embed=embed)
+                                thank_embed.set_image(url=BUMP_THANKYOU_IMAGE)
+                            
+                            await channel.send(embed=thank_embed)
                     
+                    # Start timer
                     if bump_timer:
                         bump_timer.cancel()
                     bump_timer = asyncio.create_task(start_bump_timer())
@@ -167,57 +172,28 @@ async def on_message(message):
         if message.embeds and len(message.embeds) > 0:
             embed = message.embeds[0]
             if embed.title and "Boop Success!" in embed.title:
-                user = message.interaction.user if message.interaction else None
-                
-                if user:
-                    boop_stats["count"] += 1
-                    boop_stats["last_user"] = user.id
-                    boop_stats["last_time"] = datetime.utcnow()
-                    
-                    # Your bot posts a SEPARATE thank you message with YOUR image
-                    if BUMP_CHANNEL_ID:
-                        channel = client.get_channel(BUMP_CHANNEL_ID)
-                        if channel:
-                            embed = discord.Embed(
-                                title="✅ Boop Successful!",
-                                description=f"Thanks {user.mention} for booping the server! 🎉\n\nNext boop available in 2 hours.",
-                                color=discord.Color.green()
-                            )
-                            if BOOP_THANKYOU_IMAGE:
-                                embed.set_image(url=BOOP_THANKYOU_IMAGE)
-                            await channel.send(embed=embed)
-                    
-                    if boop_timer:
-                        boop_timer.cancel()
-                    boop_timer = asyncio.create_task(start_boop_timer())
-    
-    # Detect Unfocused boop success (Unfocused bot ID: 1233144142039195648)
-    elif message.author.id == 1233144142039195648:
-        # Check for boop success message
-        if message.embeds and len(message.embeds) > 0:
-            embed = message.embeds[0]
-            # Adjust this condition based on Unfocused's actual success message
-            if "booped" in (embed.description or "").lower():
-                user = message.interaction.user if message.interaction else None
+                user = message.interaction_metadata.user if message.interaction_metadata else None
                 
                 if user:
                     # Update stats
                     boop_stats["count"] += 1
                     boop_stats["last_user"] = user.id
-                    boop_stats["last_time"] = datetime.utcnow()
+                    boop_stats["last_time"] = datetime.now(UTC)
                     
                     # Post thank you
                     if BUMP_CHANNEL_ID:
                         channel = client.get_channel(BUMP_CHANNEL_ID)
                         if channel:
-                            embed = discord.Embed(
+                            thank_embed = discord.Embed(
                                 title="✅ Boop Successful!",
                                 description=f"Thanks {user.mention} for booping the server! 🎉\n\nNext boop available in 2 hours.",
                                 color=discord.Color.green()
                             )
+                            
                             if BOOP_THANKYOU_IMAGE:
-                                embed.set_image(url=BOOP_THANKYOU_IMAGE)
-                            await channel.send(embed=embed)
+                                thank_embed.set_image(url=BOOP_THANKYOU_IMAGE)
+                            
+                            await channel.send(embed=thank_embed)
                     
                     # Start timer
                     if boop_timer:
@@ -230,7 +206,7 @@ async def bump_status(interaction: discord.Interaction):
     
     bump_info = "⏰ Ready to bump!"
     if bump_stats["last_time"]:
-        time_since = datetime.utcnow() - bump_stats["last_time"]
+        time_since = datetime.now(UTC) - bump_stats["last_time"]
         time_until = timedelta(hours=2) - time_since
         if time_until.total_seconds() > 0:
             minutes = int(time_until.total_seconds() / 60)
@@ -240,7 +216,7 @@ async def bump_status(interaction: discord.Interaction):
     
     boop_info = "⏰ Ready to boop!"
     if boop_stats["last_time"]:
-        time_since = datetime.utcnow() - boop_stats["last_time"]
+        time_since = datetime.now(UTC) - boop_stats["last_time"]
         time_until = timedelta(hours=2) - time_since
         if time_until.total_seconds() > 0:
             minutes = int(time_until.total_seconds() / 60)
