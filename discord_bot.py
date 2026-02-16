@@ -105,9 +105,9 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
             quote_text = quote_text[:max_chars - 3] + "..."
         
         # --- Find bubble size that maintains ~3:1 width:height ratio ---
-        line_height = 30
-        h_pad_pct = 0.1  # horizontal padding % on each side
-        v_pad_px = 90      # fixed vertical padding in pixels (top + bottom total)
+        line_height = 28
+        h_pad_pct = 0.15  # horizontal padding % on each side
+        v_pad_px = 100      # fixed vertical padding in pixels (top + bottom total)
         
         draw_temp = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
         
@@ -132,14 +132,14 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         best_width = 450
         best_ratio_diff = float('inf')
         
-        for test_width in range(300, 700, 10):
+        for test_width in range(350, 750, 10):
             text_area_w = int(test_width * (1 - 2 * h_pad_pct))
             test_lines = wrap_text(quote_text, text_area_w)
             text_block_h = len(test_lines) * line_height
             test_height = text_block_h + v_pad_px
             
             # Enforce minimum height
-            test_height = max(test_height, 120)
+            test_height = max(test_height, 150)
             
             ratio = test_width / test_height
             diff = abs(ratio - 3.0)
