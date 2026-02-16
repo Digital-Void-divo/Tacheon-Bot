@@ -121,12 +121,9 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         draw_mask.ellipse((0, 0, 150, 150), fill=255)
         avatar.putalpha(mask)
         
-        # Load pixel font (using default if custom not available)
-        try:
-            # Try to use a pixel-style font
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 24)
-        except:
-            font = ImageFont.load_default()
+        # Use PIL's default font
+        font = ImageFont.load_default(size=20)
+        username_font = ImageFont.load_default(size=16)
         
         # Calculate text dimensions and wrap text
         bubble_width = bubble.width
@@ -151,7 +148,7 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
             lines.append(current_line.strip())
         
         # Calculate required bubble height
-        line_height = 35
+        line_height = 30
         text_height = len(lines) * line_height
         min_bubble_height = text_height + 100  # Add padding
         
@@ -189,7 +186,6 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
             draw.text((text_x, text_y), line, font=font, fill=(255, 255, 255, 255))
         
         # Draw username below avatar
-        username_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
         name_bbox = draw.textbbox((0, 0), user.display_name, font=username_font)
         name_width = name_bbox[2] - name_bbox[0]
         name_x = 100 - (name_width // 2)
