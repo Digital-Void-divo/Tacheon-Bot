@@ -77,7 +77,6 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
     """Generate a quote image with user avatar and speech bubble"""
     
     try:
-        # Download user avatar
         async with aiohttp.ClientSession() as session:
             async with session.get(str(user.display_avatar.url)) as resp:
                 avatar_bytes = await resp.read()
@@ -100,88 +99,97 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         font = ImageFont.load_default(size=24)
         username_font = ImageFont.load_default(size=18)
         
-        # --- Truncate text to prevent overflow ---
+        # --- Truncate text ---
         max_chars = 200
         if len(quote_text) > max_chars:
             quote_text = quote_text[:max_chars - 3] + "..."
         
-        # --- Text wrapping ---
-        # The bubble interior padding (percentage of bubble size)
-        # Adjust these based on your specific bubble image's border thickness
-        h_padding_pct = 0.15  # 15% padding on each side
-        v_padding_pct = 0.20  # 20% padding top/bottom
-        
-        # We'll target a bubble width and calculate text area from it
-        target_bubble_width = 450
-        text_area_width = int(target_bubble_width * (1 - 2 * h_padding_pct))
+        # --- Find bubble size that maintains ~2:1 width:height ratio ---
+        line_height = 32
+        h_pad_pct = 0.15  # horizontal padding % on each side
+        v_pad_px = 40      # fixed vertical padding in pixels (top + bottom total)
         
         draw_temp = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
-        lines = []
-        words = quote_text.split()
-        current_line = ""
         
-        for word in words:
-            test_line = current_line + word + " "
-            bbox = draw_temp.textbbox((0, 0), test_line, font=font)
-            if bbox[2] - bbox[0] <= text_area_width:
-                current_line = test_line
-            else:
-                if current_line:
-                    lines.append(current_line.strip())
-                current_line = word + " "
-        if current_line:
-            lines.append(current_line.strip())
+        def wrap_text(text, max_width):
+            lines = []
+            words = text.split()
+            current_line = ""
+            for word in words:
+                test_line = current_line + word + " "
+                bbox = draw_temp.textbbox((0, 0), test_line, font=font)
+                if bbox[2] - bbox[0] <= max_width:
+                    current_line = test_line
+                else:
+                    if current_line:
+                        lines.append(current_line.strip())
+                    current_line = word + " "
+            if current_line:
+                lines.append(current_line.strip())
+            return lines
         
-        # --- Scale bubble to fit text ---
-        line_height = 32
+        # Try different widths and pick the one closest to 2:1 ratio
+        best_width = 450
+        best_ratio_diff = float('inf')
+        
+        for test_width in range(300, 700, 10):
+            text_area_w = int(test_width * (1 - 2 * h_pad_pct))
+            test_lines = wrap_text(quote_text, text_area_w)
+            text_block_h = len(test_lines) * line_height
+            test_height = text_block_h + v_pad_px
+            
+            # Enforce minimum height
+            test_height = max(test_height, 120)
+            
+            ratio = test_width / test_height
+            diff = abs(ratio - 2.0)
+            if diff < best_ratio_diff:
+                best_ratio_diff = diff
+                best_width = test_width
+        
+        # Enforce minimum width
+        target_bubble_width = max(best_width, 300)
+        
+        # Now calculate final layout with chosen width
+        text_area_width = int(target_bubble_width * (1 - 2 * h_pad_pct))
+        lines = wrap_text(quote_text, text_area_width)
         text_block_height = len(lines) * line_height
         
-        # Required interior height for text + vertical padding
-        required_interior_h = text_block_height
-        target_bubble_height = int(required_interior_h / (1 - 2 * v_padding_pct))
-        target_bubble_height = max(target_bubble_height, 150)  # minimum size
+        # Bubble height from text + fixed padding
+        target_bubble_height = text_block_height + v_pad_px
+        target_bubble_height = max(target_bubble_height, 120)
         
-        # Scale bubble image to target size
-        scale_x = target_bubble_width / bubble_orig.width
-        scale_y = target_bubble_height / bubble_orig.height
+        # Scale bubble image
         bubble = bubble_orig.resize(
             (target_bubble_width, target_bubble_height),
             Image.Resampling.LANCZOS
         )
         
         # --- Layout positions ---
-        # Bubble tail points bottom-left, so avatar goes below-left of bubble
         padding = 20
-        bubble_x = avatar_size + padding  # bubble starts to the right of avatar area
+        bubble_x = avatar_size + padding
         bubble_y = padding
         
-        # Avatar positioned at bottom-left, aligned with the tail
-        # Adjust avatar_y so it sits near the bottom of the bubble where the tail is
         avatar_x = padding
-        avatar_y = bubble_y + target_bubble_height - avatar_size + 10  # slight overlap with tail
+        avatar_y = bubble_y + target_bubble_height - avatar_size + 10
         
-        # --- Canvas ---
         canvas_width = bubble_x + target_bubble_width + padding
         canvas_height = max(avatar_y + avatar_size + 40, bubble_y + target_bubble_height + padding)
         canvas = Image.new('RGBA', (canvas_width, canvas_height), (0, 0, 0, 0))
         
-        # Paste bubble and avatar
         canvas.paste(bubble, (bubble_x, bubble_y), bubble)
         canvas.paste(avatar, (avatar_x, avatar_y), avatar)
         
-        # --- Draw quote text centered inside bubble ---
+        # --- Draw text centered in bubble with equal top/bottom padding ---
         draw = ImageDraw.Draw(canvas)
         
-        text_area_x_start = bubble_x + int(target_bubble_width * h_padding_pct)
-        text_area_y_start = bubble_y + int(target_bubble_height * v_padding_pct)
-        # Center text block vertically in the text area
-        text_area_inner_h = target_bubble_height - 2 * int(target_bubble_height * v_padding_pct)
-        text_offset_y = text_area_y_start + (text_area_inner_h - text_block_height) // 2
+        text_area_x_start = bubble_x + int(target_bubble_width * h_pad_pct)
+        # Center text block vertically with equal spacing top and bottom
+        text_offset_y = bubble_y + (target_bubble_height - text_block_height) // 2
         
         for i, line in enumerate(lines):
             bbox = draw.textbbox((0, 0), line, font=font)
             lw = bbox[2] - bbox[0]
-            # Center each line horizontally in the text area
             text_x = text_area_x_start + (text_area_width - lw) // 2
             text_y = text_offset_y + i * line_height
             draw.text((text_x, text_y), line, font=font, fill=(255, 255, 255, 255))
@@ -194,7 +202,6 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         name_y = avatar_y + avatar_size + 5
         draw.text((name_x, name_y), name_text, font=username_font, fill=(255, 255, 255, 255))
         
-        # Save
         output = BytesIO()
         canvas.save(output, format='PNG')
         output.seek(0)
