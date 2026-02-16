@@ -61,7 +61,7 @@ class QuoteModal(discord.ui.Modal, title="Submit a Quote"):
                 if channel:
                     file = discord.File(fp=BytesIO(image_bytes), filename="quote.png")
                     await channel.send(
-                        content=f"📜 Quote submitted by {interaction.user.mention}",
+                        content=f"📜 {self.quoted_user.mention}'s quote submitted by {interaction.user.mention}",
                         file=file
                     )
                     await interaction.followup.send("✅ Quote posted!", ephemeral=True)
