@@ -106,7 +106,8 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         
         # --- Find bubble size that maintains ~3:1 width:height ratio ---
         line_height = 28
-        h_pad_pct = 0.15  # horizontal padding % on each side
+        h_pad_left = 0.15
+        h_pad_right = 0.075  # horizontal padding % on each side
         v_pad_px = 100      # fixed vertical padding in pixels (top + bottom total)
         
         draw_temp = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
@@ -133,7 +134,7 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         best_ratio_diff = float('inf')
         
         for test_width in range(350, 750, 10):
-            text_area_w = int(test_width * (1 - 2 * h_pad_pct))
+            text_area_w = int(test_width * (1 - h_pad_left - h_pad_right))
             test_lines = wrap_text(quote_text, text_area_w)
             text_block_h = len(test_lines) * line_height
             test_height = text_block_h + v_pad_px
@@ -151,7 +152,7 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         target_bubble_width = max(best_width, 300)
         
         # Now calculate final layout with chosen width
-        text_area_width = int(target_bubble_width * (1 - 2 * h_pad_pct))
+        text_area_width = int(target_bubble_width * (1 - h_pad_left - h_pad_right))
         lines = wrap_text(quote_text, text_area_width)
         text_block_height = len(lines) * line_height
         
@@ -183,9 +184,9 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         # --- Draw text centered in bubble with equal top/bottom padding ---
         draw = ImageDraw.Draw(canvas)
         
-        text_area_x_start = bubble_x + int(target_bubble_width * h_pad_pct)
+        text_area_x_start = bubble_x + int(target_bubble_width * h_pad_left)
         # Center text block vertically with equal spacing top and bottom
-        text_offset_y = bubble_y + (target_bubble_height - text_block_height) // 2
+        text_offset_y = bubble_y + (target_bubble_height - text_block_height) // 3
         
         for i, line in enumerate(lines):
             bbox = draw.textbbox((0, 0), line, font=font)
