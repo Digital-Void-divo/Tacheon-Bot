@@ -112,18 +112,18 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         bubble = Image.open(BytesIO(bubble_bytes)).convert("RGBA")
         
         print("Resizing avatar...")
-        # Resize avatar to 300x300
-        avatar = avatar.resize((300, 300), Image.Resampling.LANCZOS)
+        # Resize avatar to 150x150 (halved from 300)
+        avatar = avatar.resize((150, 150), Image.Resampling.LANCZOS)
         
         # Create circular mask for avatar
-        mask = Image.new('L', (300, 300), 0)
+        mask = Image.new('L', (150, 150), 0)
         draw_mask = ImageDraw.Draw(mask)
-        draw_mask.ellipse((0, 0, 300, 300), fill=255)
+        draw_mask.ellipse((0, 0, 150, 150), fill=255)
         avatar.putalpha(mask)
         
-        # Use even larger font sizes
-        font = ImageFont.load_default(size=60)  # Increased from 40
-        username_font = ImageFont.load_default(size=40)  # Increased from 32
+        # Halved font sizes
+        font = ImageFont.load_default(size=30)  # Halved from 60
+        username_font = ImageFont.load_default(size=20)  # Halved from 40
         
         # Calculate text dimensions and wrap text
         bubble_width = bubble.width
@@ -148,7 +148,7 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
             lines.append(current_line.strip())
         
         # Calculate required bubble height (less tall)
-        line_height = 70  # Increased from 50
+        line_height = 40  # Adjusted for smaller font
         text_height = len(lines) * line_height
         min_bubble_height = text_height + 200  # Padding
         
@@ -165,16 +165,16 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         bubble_width = bubble.width
         
         # Create final canvas - avatar bottom aligned with bubble
-        canvas_width = 350 + bubble_width
-        canvas_height = max(400, new_height + 100)  # Extra space for username
+        canvas_width = 250 + bubble_width  # Adjusted for smaller avatar
+        canvas_height = max(250, new_height + 100)  # Extra space for username
         canvas = Image.new('RGBA', (canvas_width, canvas_height), (0, 0, 0, 0))
         
         # Position bubble first (centered vertically)
         bubble_y = 50
-        canvas.paste(bubble, (325, bubble_y), bubble)
+        canvas.paste(bubble, (225, bubble_y), bubble)
         
         # Position avatar lower - aligned with bottom of bubble
-        avatar_y = bubble_y + new_height - 200  # Avatar bottom aligns near bubble bottom
+        avatar_y = bubble_y + new_height - 125  # Avatar bottom aligns near bubble bottom
         canvas.paste(avatar, (25, avatar_y), avatar)
         
         # Draw text centered in bubble
@@ -184,7 +184,7 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         for i, line in enumerate(lines):
             bbox = draw.textbbox((0, 0), line, font=font)
             text_width = bbox[2] - bbox[0]
-            text_x = 325 + (bubble_width - text_width) // 2
+            text_x = 225 + (bubble_width - text_width) // 2
             text_y = text_start_y + (i * line_height)
             
             # Draw text with white color
@@ -193,8 +193,8 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         # Draw username below avatar
         name_bbox = draw.textbbox((0, 0), user.display_name, font=username_font)
         name_width = name_bbox[2] - name_bbox[0]
-        name_x = 175 - (name_width // 2)
-        name_y = avatar_y + 320
+        name_x = 100 - (name_width // 2)
+        name_y = avatar_y + 160
         draw.text((name_x, name_y), user.display_name, font=username_font, fill=(255, 255, 255, 255))
         
         # Save to bytes
