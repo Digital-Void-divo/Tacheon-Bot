@@ -106,7 +106,7 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
         
         # --- Find bubble size that maintains ~3:1 width:height ratio ---
         line_height = 30
-        h_pad_pct = 0.2  # horizontal padding % on each side
+        h_pad_pct = 0.1  # horizontal padding % on each side
         v_pad_px = 90      # fixed vertical padding in pixels (top + bottom total)
         
         draw_temp = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
