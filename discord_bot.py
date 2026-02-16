@@ -128,7 +128,7 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
                 lines.append(current_line.strip())
             return lines
         
-        # Try different widths and pick the one closest to 2:1 ratio
+        # Try different widths and pick the one closest to 3:1 ratio
         best_width = 450
         best_ratio_diff = float('inf')
         
@@ -142,7 +142,7 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
             test_height = max(test_height, 120)
             
             ratio = test_width / test_height
-            diff = abs(ratio - 2.0)
+            diff = abs(ratio - 3.0)
             if diff < best_ratio_diff:
                 best_ratio_diff = diff
                 best_width = test_width
