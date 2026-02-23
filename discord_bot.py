@@ -16,6 +16,7 @@ tree = app_commands.CommandTree(client)
 # Configuration
 QUOTES_CHANNEL_ID = int(os.getenv('QUOTES_CHANNEL_ID', '0'))
 SPEECH_BUBBLE_IMAGE = os.getenv('SPEECH_BUBBLE_IMAGE', '')
+FEEDBACK_CHANNEL_ID = int(os.getenv('FEEDBACK_CHANNEL_ID', '0'))
 
 # Response lists
 JOKES = [
@@ -72,6 +73,38 @@ class QuoteModal(discord.ui.Modal, title="Submit a Quote"):
         except Exception as e:
             print(f"Error generating quote: {e}")
             await interaction.followup.send(f"❌ Error creating quote: {e}", ephemeral=True)
+
+
+# Feedback Modal
+class FeedbackModal(discord.ui.Modal, title="Anonymous Feedback"):
+    feedback_text = discord.ui.TextInput(
+        label="Your feedback",
+        style=discord.TextStyle.paragraph,
+        placeholder="Share your thoughts — this is completely anonymous...",
+        required=True,
+        max_length=1000
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        if FEEDBACK_CHANNEL_ID:
+            channel = client.get_channel(FEEDBACK_CHANNEL_ID)
+            if channel:
+                embed = discord.Embed(
+                    title="📬 Anonymous Feedback",
+                    description=str(self.feedback_text),
+                    color=discord.Color.blurple()
+                )
+                await channel.send(embed=embed)
+                await interaction.followup.send(
+                    "✅ Your feedback was sent anonymously. Thanks!", ephemeral=True
+                )
+            else:
+                await interaction.followup.send("❌ Feedback channel not found!", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ FEEDBACK_CHANNEL_ID not configured!", ephemeral=True)
+
 
 async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
     """Generate a quote image with user avatar and speech bubble"""
@@ -236,6 +269,12 @@ async def quote(interaction: discord.Interaction, user: discord.Member):
     modal = QuoteModal(user)
     await interaction.response.send_modal(modal)
 
+@tree.command(name="feedback", description="Send anonymous feedback to the mods")
+async def feedback(interaction: discord.Interaction):
+    """Submit anonymous feedback — your identity will not be shared"""
+    modal = FeedbackModal()
+    await interaction.response.send_modal(modal)
+
 @client.event
 async def on_ready():
     await tree.sync()
@@ -245,5 +284,9 @@ async def on_ready():
         print(f'📜 Posting quotes to channel ID: {QUOTES_CHANNEL_ID}')
     else:
         print(f'⚠️  QUOTES_CHANNEL_ID not set!')
+    if FEEDBACK_CHANNEL_ID:
+        print(f'📬 Posting feedback to channel ID: {FEEDBACK_CHANNEL_ID}')
+    else:
+        print(f'⚠️  FEEDBACK_CHANNEL_ID not set!')
 
 client.run(os.getenv('DISCORD_TOKEN'))
