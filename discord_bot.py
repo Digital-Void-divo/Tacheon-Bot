@@ -3,6 +3,9 @@ from discord import app_commands
 import random
 import os
 import json
+import sqlite3
+import asyncio
+from datetime import datetime, timezone
 from PIL import Image, ImageDraw, ImageFont
 import aiohttp
 from io import BytesIO
@@ -19,10 +22,112 @@ QUOTES_CHANNEL_ID = int(os.getenv('QUOTES_CHANNEL_ID', '0'))
 SPEECH_BUBBLE_IMAGE = os.getenv('SPEECH_BUBBLE_IMAGE', '')
 FEEDBACK_CHANNEL_ID = int(os.getenv('FEEDBACK_CHANNEL_ID', '0'))
 
-# --- Welcome DM Storage ---
-# welcome_dm.json stores:
-#   "message": "the welcome text"
-#   "enabled": true/false
+# Membership role configuration
+# Set these in your environment or replace with hard-coded role IDs
+ROLE_TO_ADD_ID    = int(os.getenv('ROLE_TO_ADD_ID', '0'))     # Role granted after qualifying
+ROLE_TO_REMOVE_ID = int(os.getenv('ROLE_TO_REMOVE_ID', '0'))  # Role removed after qualifying
+
+REQUIRED_HOURS    = 72
+REQUIRED_MESSAGES = 50
+
+# ---------------------------------------------------------------------------
+# SQLite — Membership Tracking
+# ---------------------------------------------------------------------------
+DB_FILE = "membership.db"
+
+def db_connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    with db_connect() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS members (
+                user_id    INTEGER PRIMARY KEY,
+                guild_id   INTEGER NOT NULL,
+                joined_at  TEXT    NOT NULL,
+                msg_count  INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+
+def db_add_member(user_id: int, guild_id: int, joined_at: datetime):
+    with db_connect() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO members (user_id, guild_id, joined_at, msg_count) VALUES (?, ?, ?, 0)",
+            (user_id, guild_id, joined_at.isoformat())
+        )
+
+def db_increment_message(user_id: int) -> dict | None:
+    """Increment message count and return the row, or None if user isn't tracked."""
+    with db_connect() as conn:
+        conn.execute(
+            "UPDATE members SET msg_count = msg_count + 1 WHERE user_id = ?",
+            (user_id,)
+        )
+        row = conn.execute(
+            "SELECT * FROM members WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+def db_remove_member(user_id: int):
+    with db_connect() as conn:
+        conn.execute("DELETE FROM members WHERE user_id = ?", (user_id,))
+
+def db_get_all_members() -> list[dict]:
+    with db_connect() as conn:
+        rows = conn.execute("SELECT * FROM members").fetchall()
+    return [dict(r) for r in rows]
+
+# ---------------------------------------------------------------------------
+# Role swap helper
+# ---------------------------------------------------------------------------
+async def try_role_swap(member: discord.Member):
+    """Add ROLE_TO_ADD, remove ROLE_TO_REMOVE, then delete member from DB."""
+    try:
+        if ROLE_TO_ADD_ID:
+            role_add = member.guild.get_role(ROLE_TO_ADD_ID)
+            if role_add:
+                await member.add_roles(role_add, reason="Met 72h + 50 message requirement")
+
+        if ROLE_TO_REMOVE_ID:
+            role_remove = member.guild.get_role(ROLE_TO_REMOVE_ID)
+            if role_remove and role_remove in member.roles:
+                await member.remove_roles(role_remove, reason="Met 72h + 50 message requirement")
+
+        db_remove_member(member.id)
+        print(f"✅ Role swap complete for {member} — removed from tracking DB.")
+    except discord.Forbidden:
+        print(f"⚠️  Missing permissions to manage roles for {member}.")
+    except Exception as e:
+        print(f"⚠️  Role swap error for {member}: {e}")
+
+def has_met_requirements(row: dict) -> bool:
+    joined_at = datetime.fromisoformat(row["joined_at"])
+    if joined_at.tzinfo is None:
+        joined_at = joined_at.replace(tzinfo=timezone.utc)
+    hours_in_server = (datetime.now(timezone.utc) - joined_at).total_seconds() / 3600
+    return hours_in_server >= REQUIRED_HOURS and row["msg_count"] >= REQUIRED_MESSAGES
+
+# ---------------------------------------------------------------------------
+# Background task — checks the 72-hour condition every 10 minutes
+# This catches members who hit 50 messages early but hadn't yet reached 72h
+# ---------------------------------------------------------------------------
+async def membership_check_loop():
+    await client.wait_until_ready()
+    while not client.is_closed():
+        for row in db_get_all_members():
+            if has_met_requirements(row):
+                guild = client.get_guild(row["guild_id"])
+                if guild:
+                    member = guild.get_member(row["user_id"])
+                    if member:
+                        await try_role_swap(member)
+        await asyncio.sleep(600)  # run every 10 minutes
+
+# ---------------------------------------------------------------------------
+# Welcome DM Storage
+# ---------------------------------------------------------------------------
 WELCOME_DM_FILE = "welcome_dm.json"
 
 def load_welcome_dm() -> dict:
@@ -267,7 +372,9 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
 # ---------------------------------------------------------------------------
 @client.event
 async def on_ready():
+    init_db()
     await tree.sync()
+    client.loop.create_task(membership_check_loop())
     print(f'✅ Logged in as {client.user}')
     print(f'📝 Commands synced and ready!')
     if QUOTES_CHANNEL_ID:
@@ -278,6 +385,10 @@ async def on_ready():
         print(f'📬 Posting feedback to channel ID: {FEEDBACK_CHANNEL_ID}')
     else:
         print(f'⚠️  FEEDBACK_CHANNEL_ID not set!')
+    if ROLE_TO_ADD_ID and ROLE_TO_REMOVE_ID:
+        print(f'🎖️  Membership tracking active — add role: {ROLE_TO_ADD_ID}, remove role: {ROLE_TO_REMOVE_ID}')
+    else:
+        print(f'⚠️  ROLE_TO_ADD_ID or ROLE_TO_REMOVE_ID not set — membership role swap disabled!')
     welcome_data = load_welcome_dm()
     if welcome_data["enabled"] and welcome_data["message"]:
         print(f'👋 Welcome DM is enabled.')
@@ -287,10 +398,13 @@ async def on_ready():
 
 @client.event
 async def on_member_join(member: discord.Member):
-    """Send a welcome DM to every new member if configured."""
     if member.bot:
         return
 
+    # Add to membership tracking DB
+    db_add_member(member.id, member.guild.id, member.joined_at or datetime.now(timezone.utc))
+
+    # Send welcome DM if configured
     data = load_welcome_dm()
     if not data.get("enabled") or not data.get("message"):
         return
@@ -306,8 +420,32 @@ async def on_member_join(member: discord.Member):
     try:
         await member.send(embed=embed)
     except discord.Forbidden:
-        # Member has DMs closed — nothing we can do
         print(f"⚠️  Could not DM {member} (DMs likely closed).")
+
+
+@client.event
+async def on_message(message: discord.Message):
+    # Ignore bots
+    if message.author.bot:
+        return
+
+    row = db_increment_message(message.author.id)
+
+    # If user isn't in the DB they've already qualified — nothing to do
+    if row is None:
+        return
+
+    # Check if they've now hit both thresholds
+    if has_met_requirements(row):
+        member = message.guild.get_member(message.author.id) if message.guild else None
+        if member:
+            await try_role_swap(member)
+
+
+@client.event
+async def on_member_remove(member: discord.Member):
+    """Clean up DB entry if an unqualified member leaves."""
+    db_remove_member(member.id)
 
 # ---------------------------------------------------------------------------
 # Slash commands
