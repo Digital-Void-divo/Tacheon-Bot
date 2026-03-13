@@ -8,16 +8,16 @@
         "joined": "2026-03-13T10:27:17.669352+00:00"
       },
       "baseline": {
-        "set_at": "2026-03-13T10:27:17.669367+00:00",
-        "weight": 124.0,
-        "body_fat_pct": 124.0,
-        "neck": 124.0,
-        "chest": 124.0,
-        "waist": 124.0,
-        "resting_heart_rate": 124.0,
-        "bench": 124.0,
-        "cardio_duration": "124",
-        "notes": "124"
+        "set_at": "2026-03-13T10:47:17.999778+00:00",
+        "weight": 900.0,
+        "body_fat_pct": 555.0,
+        "neck": 252.0,
+        "chest": 242.0,
+        "waist": 121.0,
+        "resting_heart_rate": 616.0,
+        "bench": 252.0,
+        "cardio_duration": "416",
+        "notes": "Bloop"
       },
       "goals": [],
       "stats": [],
