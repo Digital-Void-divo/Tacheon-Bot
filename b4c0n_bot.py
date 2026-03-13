@@ -403,7 +403,8 @@ class BaselineModal1(discord.ui.Modal, title='Baseline — Part 1 of 2'):
 
     def __init__(self, unit: str = 'lbs', existing: dict | None = None):
         super().__init__()
-        self.unit = unit
+        self.unit      = unit
+        self._existing = existing
         if existing:
             if existing.get('weight')       is not None: self.weight.default       = str(existing['weight'])
             if existing.get('body_fat_pct') is not None: self.body_fat_pct.default = str(existing['body_fat_pct'])
@@ -412,6 +413,7 @@ class BaselineModal1(discord.ui.Modal, title='Baseline — Part 1 of 2'):
             if existing.get('waist')        is not None: self.waist.default        = str(existing['waist'])
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         part1 = {
             'weight':       self.weight.value or None,
             'body_fat_pct': self.body_fat_pct.value or None,
@@ -419,15 +421,25 @@ class BaselineModal1(discord.ui.Modal, title='Baseline — Part 1 of 2'):
             'chest':        self.chest.value or None,
             'waist':        self.waist.value or None,
         }
-        await interaction.response.send_modal(
-            BaselineModal2(unit=self.unit, part1=part1, existing=self.existing if hasattr(self, 'existing') else None)
+        await interaction.followup.send(
+            '📏 **Part 1 saved!** Click below to continue to Part 2:',
+            view=BaselinePart2Bridge(unit=self.unit, part1=part1, existing=self._existing),
+            ephemeral=True,
         )
 
-    # Store existing on instance for Modal2 access
-    @property
-    def existing(self): return getattr(self, '_existing', None)
-    @existing.setter
-    def existing(self, v): self._existing = v
+
+class BaselinePart2Bridge(discord.ui.View):
+    def __init__(self, unit: str, part1: dict, existing: dict | None = None):
+        super().__init__(timeout=300)
+        self.unit     = unit
+        self.part1    = part1
+        self.existing = existing
+
+    @discord.ui.button(label='Continue to Part 2 →', style=discord.ButtonStyle.primary)
+    async def continue_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(
+            BaselineModal2(unit=self.unit, part1=self.part1, existing=self.existing)
+        )
 
 
 class BaselineModal2(discord.ui.Modal, title='Baseline — Part 2 of 2'):
@@ -694,10 +706,28 @@ class StatsModal1(discord.ui.Modal, title='Update Stats — Part 1 of 2'):
             'waist':        self.waist.value or None,
         }
         prev = self.user_data['stats'][-1] if self.user_data.get('stats') else {}
-        await interaction.response.send_modal(
-            StatsModal2(user_data=self.user_data, part1=part1, prev=prev)
+        await interaction.response.defer(ephemeral=True)
+        await interaction.followup.send(
+            '📊 **Part 1 saved!** Click below to continue to Part 2:',
+            view=StatsPart2Bridge(user_data=self.user_data, part1=part1, prev=prev),
+            ephemeral=True,
         )
 
+
+
+
+class StatsPart2Bridge(discord.ui.View):
+    def __init__(self, user_data: dict, part1: dict, prev: dict):
+        super().__init__(timeout=300)
+        self.user_data = user_data
+        self.part1     = part1
+        self.prev      = prev
+
+    @discord.ui.button(label='Continue to Part 2 →', style=discord.ButtonStyle.primary)
+    async def continue_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(
+            StatsModal2(user_data=self.user_data, part1=self.part1, prev=self.prev)
+        )
 
 class StatsModal2(discord.ui.Modal, title='Update Stats — Part 2 of 2'):
     resting_heart_rate = discord.ui.TextInput(label='Resting Heart Rate (bpm)', placeholder='e.g. 65',    required=False)
