@@ -1356,6 +1356,16 @@ async def generate_quote_image(user: discord.Member, quote_text: str) -> bytes:
 # ═══════════════════════════════════════════════════════════════════════════════
 #  QUOTE MODALS  (unchanged)
 # ═══════════════════════════════════════════════════════════════════════════════
+class QuoteUserSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+    @discord.ui.select(cls=discord.ui.UserSelect, placeholder='Select a member to quote…')
+    async def user_select(self, interaction: discord.Interaction, select: discord.ui.UserSelect):
+        member = select.values[0]
+        await interaction.response.send_modal(QuoteModal(user=member))
+
+
 class UserQuoteModal(discord.ui.Modal, title="Submit a Quote"):
     username   = discord.ui.TextInput(
         label="Who said it? (@ mention or display name)",
@@ -1464,7 +1474,11 @@ class PanelButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         if self.custom_id == "btn_quote":
-            await interaction.response.send_modal(UserQuoteModal())
+            await interaction.response.send_message(
+                '📜 **Who do you want to quote?** Pick a member below:',
+                view=QuoteUserSelectView(),
+                ephemeral=True,
+            )
 
         elif self.custom_id == "btn_fitness":
             try:
