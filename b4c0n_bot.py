@@ -714,8 +714,6 @@ class StatsModal1(discord.ui.Modal, title='Update Stats — Part 1 of 2'):
         )
 
 
-
-
 class StatsPart2Bridge(discord.ui.View):
     def __init__(self, user_data: dict, part1: dict, prev: dict):
         super().__init__(timeout=300)
@@ -1476,13 +1474,13 @@ def build_fitness_hub_embed() -> discord.Embed:
 # ═══════════════════════════════════════════════════════════════════════════════
 BOT_COMMANDS = [
     {
-        "name":         "📜 Quote",
+        "name":         "📜 /quote",
         "description":  "Immortalise what someone said as a generated quote image.",
         "button_label": "Quote Someone",
         "button_id":    "btn_quote",
     },
     {
-        "name":         "🏋️ Fitness Tracker",
+        "name":         "🏋️ /b4c0nfitness",
         "description":  "Set goals, log workouts, track stats, and view your weekly progress.",
         "button_label": "Fitness Tracker",
         "button_id":    "btn_fitness",
@@ -1513,9 +1511,7 @@ class PanelButton(discord.ui.Button):
             try:
                 data, _   = await gh_load()
                 user_data = data['users'].get(str(interaction.user.id))
-                # Ensure user record exists (without saving — first real action will save)
                 if not user_data:
-                    # Pre-populate for the hub but don't write yet
                     user_data = None
             except Exception:
                 user_data = None
