@@ -60,6 +60,30 @@
       "stats": [],
       "workout_log": [],
       "history_notes": []
+    },
+    "351241708257804302": {
+      "meta": {
+        "username": "itsderek",
+        "is_public": true,
+        "unit_preference": "lbs",
+        "joined": "2026-03-25T02:18:27.012972+00:00"
+      },
+      "baseline": {
+        "set_at": "2026-03-25T02:18:27.013004+00:00",
+        "weight": 237.8,
+        "body_fat_pct": 30.6,
+        "neck": 18.0,
+        "chest": 45.0,
+        "waist": 38.0,
+        "resting_heart_rate": 64.0,
+        "bench": null,
+        "cardio_duration": "00:30",
+        "notes": "Returning from IRR; joining the grind"
+      },
+      "goals": [],
+      "stats": [],
+      "workout_log": [],
+      "history_notes": []
     }
   }
 }
